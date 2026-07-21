@@ -48,6 +48,7 @@ pub(crate) struct GitAuthConfig {
     git_path: std::path::PathBuf,
     credential_helper: Option<std::path::PathBuf>,
     nsec: String,
+    allow_file_transport: bool,
 }
 
 fn read_pipe_lossy(pipe: Option<impl Read>) -> String {
@@ -156,7 +157,15 @@ fn configure_git_auth(command: &mut Command, auth: &GitAuthConfig, needs_credent
         ("protocol.http.allow", "always".to_string()),
         ("protocol.https.allow", "always".to_string()),
         ("protocol.ext.allow", "never".to_string()),
-        ("protocol.file.allow", "never".to_string()),
+        (
+            "protocol.file.allow",
+            if auth.allow_file_transport {
+                "always"
+            } else {
+                "never"
+            }
+            .to_string(),
+        ),
     ];
     if needs_credentials {
         let Some(cred_helper) = &auth.credential_helper else {
@@ -193,7 +202,15 @@ pub(crate) fn build_git_auth_config_for_keys(keys: &Keys) -> Result<GitAuthConfi
         git_path,
         credential_helper,
         nsec,
+        allow_file_transport: false,
     })
+}
+
+#[cfg(test)]
+pub(crate) fn build_test_git_auth_config() -> Result<GitAuthConfig, String> {
+    let mut auth = build_git_auth_config_for_keys(&Keys::generate())?;
+    auth.allow_file_transport = true;
+    Ok(auth)
 }
 
 /// Normalizes and validates a relay-supplied branch name. Strips a
@@ -218,6 +235,17 @@ pub(crate) fn clean_branch(value: Option<String>) -> Option<String> {
                     .all(|c| c.is_ascii_alphanumeric() || matches!(c, '/' | '_' | '.' | '-'))
         })
         .map(ToString::to_string)
+}
+
+pub(crate) fn clean_target_ref(value: Option<String>) -> Option<String> {
+    let value = value?.trim().to_string();
+    for prefix in ["refs/tags/", "refs/nostr/"] {
+        if let Some(name) = value.strip_prefix(prefix) {
+            let clean_name = clean_branch(Some(name.to_string()))?;
+            return (clean_name == name).then_some(format!("{prefix}{clean_name}"));
+        }
+    }
+    None
 }
 
 pub(crate) fn validate_clone_url(clone_url: &str) -> Result<(), String> {
@@ -287,7 +315,7 @@ fn validate_clone_url_against_relay(clone_url: &str, relay_base: &str) -> Result
 #[cfg(test)]
 mod tests {
     use super::{
-        clean_branch, git_needs_credentials, git_subcommand, validate_clone_url,
+        clean_branch, clean_target_ref, git_needs_credentials, git_subcommand, validate_clone_url,
         validate_clone_url_against_relay,
     };
 
@@ -343,6 +371,20 @@ mod tests {
         assert_eq!(clean_branch(Some("trailing/".into())), None);
         assert_eq!(clean_branch(Some("bad name".into())), None);
         assert_eq!(clean_branch(None), None);
+    }
+
+    #[test]
+    fn clean_target_ref_accepts_only_tags_and_pull_request_refs() {
+        assert_eq!(
+            clean_target_ref(Some("refs/tags/v1.0.0".into())),
+            Some("refs/tags/v1.0.0".to_string())
+        );
+        assert_eq!(
+            clean_target_ref(Some("refs/nostr/abc123".into())),
+            Some("refs/nostr/abc123".to_string())
+        );
+        assert_eq!(clean_target_ref(Some("refs/heads/main".into())), None);
+        assert_eq!(clean_target_ref(Some("refs/tags/../main".into())), None);
     }
 
     #[test]

@@ -23,6 +23,7 @@ pub mod nostr_convert;
 mod prevent_sleep;
 mod ptt_shortcut;
 mod relay;
+mod relay_admission;
 mod reset;
 mod secret_store;
 mod shutdown;
@@ -672,6 +673,8 @@ pub fn run() {
             get_project_repo_sync_status,
             list_project_local_repositories,
             clone_project_repository,
+            create_project_remote_branch,
+            delete_project_remote_branch,
             push_project_local_repository,
             pull_project_local_repository,
             sign_project_pull_request_review_request,

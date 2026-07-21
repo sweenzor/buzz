@@ -5,7 +5,10 @@ import {
   GitBranch,
   HardDrive,
   Loader2,
+  Plus,
   RefreshCw,
+  Tag,
+  Trash2,
   UploadCloud,
 } from "lucide-react";
 
@@ -14,8 +17,10 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuLabel,
   DropdownMenuRadioGroup,
   DropdownMenuRadioItem,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/shared/ui/dropdown-menu";
 import { PROJECT_PANEL_ACTION_BUTTON_CLASS } from "./projectPanelStyles";
@@ -24,17 +29,37 @@ import { PROJECT_PANEL_ACTION_BUTTON_CLASS } from "./projectPanelStyles";
 export function RepositoryBranchDropdown({
   branch,
   branchOptions,
+  selectedTag,
+  tagOptions = [],
   compact,
+  createBranchDisabled,
+  createBranchTitle,
+  deleteBranchDisabled,
+  deleteBranchTitle,
   onBranchChange,
+  onTagChange,
+  onCreateBranch,
+  onDeleteBranch,
 }: {
   branch: string;
   branchOptions: string[];
+  selectedTag?: string | null;
+  tagOptions?: Array<{ name: string; commit: string }>;
   /** Smaller trigger for inline headers. */
   compact?: boolean;
+  createBranchDisabled?: boolean;
+  createBranchTitle?: string;
+  deleteBranchDisabled?: boolean;
+  deleteBranchTitle?: string;
   onBranchChange: (branch: string) => void;
+  onTagChange?: (tag: string) => void;
+  onCreateBranch?: () => void;
+  onDeleteBranch?: () => void;
 }) {
   const selectableBranches =
     branchOptions.length > 0 ? branchOptions : [branch];
+  const selectedValue = selectedTag ? `tag:${selectedTag}` : `branch:${branch}`;
+  const RefIcon = selectedTag ? Tag : GitBranch;
   if (!branch) {
     return (
       <span className="truncate font-mono text-sm font-semibold text-foreground">
@@ -55,19 +80,83 @@ export function RepositoryBranchDropdown({
           type="button"
           variant="outline"
         >
-          <GitBranch className="h-4 w-4 shrink-0 text-muted-foreground" />
-          <span className="truncate">{branch}</span>
+          <RefIcon className="h-4 w-4 shrink-0 text-muted-foreground" />
+          <span className="truncate">{selectedTag ?? branch}</span>
           <ChevronDown className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="start" className="min-w-56">
-        <DropdownMenuRadioGroup onValueChange={onBranchChange} value={branch}>
+        <DropdownMenuRadioGroup
+          onValueChange={(value) => {
+            if (value.startsWith("tag:")) {
+              onTagChange?.(value.slice("tag:".length));
+            } else {
+              onBranchChange(value.slice("branch:".length));
+            }
+          }}
+          value={selectedValue}
+        >
+          <DropdownMenuLabel>Branches</DropdownMenuLabel>
           {selectableBranches.map((option) => (
-            <DropdownMenuRadioItem key={option} value={option}>
+            <DropdownMenuRadioItem key={option} value={`branch:${option}`}>
+              <GitBranch className="mr-1.5 h-3.5 w-3.5 text-muted-foreground" />
               <span className="truncate font-mono">{option}</span>
             </DropdownMenuRadioItem>
           ))}
+          {tagOptions.length > 0 ? (
+            <>
+              <DropdownMenuSeparator />
+              <DropdownMenuLabel>Tags</DropdownMenuLabel>
+              {tagOptions.map((option) => (
+                <DropdownMenuRadioItem
+                  key={option.name}
+                  value={`tag:${option.name}`}
+                >
+                  <Tag className="mr-1.5 h-3.5 w-3.5 text-muted-foreground" />
+                  <span className="truncate font-mono">{option.name}</span>
+                  <span className="ml-auto font-mono text-xs text-muted-foreground">
+                    {option.commit.slice(0, 7)}
+                  </span>
+                </DropdownMenuRadioItem>
+              ))}
+            </>
+          ) : null}
         </DropdownMenuRadioGroup>
+        {!selectedTag && (onCreateBranch || onDeleteBranch) ? (
+          <>
+            <DropdownMenuSeparator />
+            {onCreateBranch ? (
+              <>
+                <DropdownMenuItem
+                  data-testid="project-create-branch"
+                  disabled={createBranchDisabled}
+                  onSelect={onCreateBranch}
+                  title={createBranchTitle}
+                >
+                  <Plus className="h-4 w-4" />
+                  Create branch…
+                </DropdownMenuItem>
+                {createBranchDisabled && createBranchTitle ? (
+                  <p className="max-w-56 px-2 py-1 text-xs text-muted-foreground">
+                    {createBranchTitle}
+                  </p>
+                ) : null}
+              </>
+            ) : null}
+            {onDeleteBranch ? (
+              <DropdownMenuItem
+                className="text-destructive focus:text-destructive"
+                data-testid="project-delete-branch"
+                disabled={deleteBranchDisabled}
+                onSelect={onDeleteBranch}
+                title={deleteBranchTitle}
+              >
+                <Trash2 className="h-4 w-4" />
+                Delete {branch}
+              </DropdownMenuItem>
+            ) : null}
+          </>
+        ) : null}
       </DropdownMenuContent>
     </DropdownMenu>
   );
@@ -77,7 +166,16 @@ export function RepositoryBranchDropdown({
 export type RepoSourceHeaderControls = {
   branch: string;
   branchOptions: string[];
+  selectedTag?: string | null;
+  tagOptions?: Array<{ name: string; commit: string }>;
   onBranchChange: (branch: string) => void;
+  onTagChange?: (tag: string) => void;
+  onCreateBranch?: () => void;
+  createBranchDisabled?: boolean;
+  createBranchTitle?: string;
+  onDeleteBranch?: () => void;
+  deleteBranchDisabled?: boolean;
+  deleteBranchTitle?: string;
   source: "remote" | "local";
   onSourceChange: (source: "remote" | "local") => void;
   localDisabled: boolean;

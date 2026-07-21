@@ -708,6 +708,123 @@ test("project without a checkout offers fetch feedback and dropdown cloning", as
   expect(commands).toContain("clone_project_repository");
 });
 
+test("project branches can be created from the selected remote branch", async ({
+  page,
+}) => {
+  await enableProjectsFeature(page);
+  await installMockBridge(page, {
+    projectHeadBranch: "master",
+    relaySelf: TEST_IDENTITIES.bob.pubkey,
+  });
+  await openBuzzProject(page);
+
+  await page.getByRole("button", { name: /main/ }).click();
+  await page.getByTestId("project-create-branch").click();
+  await page
+    .getByTestId("project-create-branch-name")
+    .fill("feature/branch-management");
+  await page.getByTestId("project-create-branch-submit").click();
+
+  await expect(
+    page.getByText("Created branch feature/branch-management from main.", {
+      exact: true,
+    }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: /feature\/branch-management/ }),
+  ).toBeVisible();
+  await page
+    .getByRole("button", { name: /feature\/branch-management/ })
+    .click();
+  await expect(
+    page.getByRole("menuitemradio", { name: "feature/branch-management" }),
+  ).toBeVisible();
+  await page.getByRole("menuitemradio", { name: "main" }).click();
+  await page.getByRole("button", { name: /main/ }).click();
+  await expect(
+    page.getByRole("menuitemradio", { name: "feature/branch-management" }),
+  ).toBeVisible();
+  const commands = await page.evaluate(
+    () => window.__BUZZ_E2E_COMMANDS__ ?? [],
+  );
+  expect(commands).toContain("create_project_remote_branch");
+
+  await openBuzzProject(page);
+  await page.getByRole("button", { name: /main/ }).click();
+  await expect(
+    page.getByRole("menuitemradio", { name: "feature/branch-management" }),
+  ).toBeVisible();
+});
+
+test("repository tags can be browsed as immutable remote snapshots", async ({
+  page,
+}) => {
+  await enableProjectsFeature(page);
+  await installMockBridge(page);
+  await openBuzzProject(page);
+
+  await page.getByRole("button", { name: /main/ }).click();
+  await expect(page.getByText("Tags", { exact: true })).toBeVisible();
+  await expect(
+    page.getByRole("menuitemradio", { name: /v1\.0\.0.*0123456/ }),
+  ).toBeVisible();
+  await page.getByRole("menuitemradio", { name: /v1\.0\.0.*0123456/ }).click();
+
+  await expect(page.getByRole("button", { name: /v1\.0\.0/ })).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: "Remote", exact: true }),
+  ).toBeVisible();
+  await expect
+    .poll(() =>
+      page.evaluate(() => {
+        const call = [...(window.__BUZZ_E2E_COMMAND_PAYLOADS__ ?? [])]
+          .reverse()
+          .find((entry) => entry.command === "get_project_repo_snapshot");
+        return (call?.payload as { targetRef?: string } | undefined)?.targetRef;
+      }),
+    )
+    .toBe("refs/tags/v1.0.0");
+  await page.getByRole("button", { name: /v1\.0\.0/ }).click();
+  await expect(page.getByTestId("project-create-branch")).toHaveCount(0);
+  await expect(page.getByTestId("project-delete-branch")).toHaveCount(0);
+
+  await page.getByRole("menuitemradio", { name: "main" }).click();
+  await page.getByRole("button", { name: /main/ }).click();
+  await expect(page.getByTestId("project-create-branch")).toBeVisible();
+});
+
+test("project branches can be deleted but the default branch cannot", async ({
+  page,
+}) => {
+  await enableProjectsFeature(page);
+  await installMockBridge(page);
+  await openBuzzProject(page);
+
+  await page.getByRole("button", { name: /main/ }).click();
+  await expect(page.getByTestId("project-delete-branch")).toBeDisabled();
+  await page.getByTestId("project-create-branch").click();
+  await page
+    .getByTestId("project-create-branch-name")
+    .fill("feature/delete-me");
+  await page.getByTestId("project-create-branch-submit").click();
+  await expect(
+    page.getByRole("button", { name: /feature\/delete-me/ }),
+  ).toBeVisible();
+  await page.getByRole("button", { name: /feature\/delete-me/ }).click();
+  await page.getByTestId("project-delete-branch").click();
+  await expect(page.getByTestId("project-delete-branch-dialog")).toBeVisible();
+  await page.getByTestId("project-delete-branch-submit").click();
+
+  await expect(
+    page.getByText("Deleted branch feature/delete-me.", { exact: true }),
+  ).toBeVisible();
+  await expect(page.getByRole("button", { name: /main/ })).toBeVisible();
+  const commands = await page.evaluate(
+    () => window.__BUZZ_E2E_COMMANDS__ ?? [],
+  );
+  expect(commands).toContain("delete_project_remote_branch");
+});
+
 test("pushed local branch can open a pull request", async ({ page }) => {
   await enableProjectsFeature(page);
   await page.addInitScript(() => {
@@ -715,6 +832,7 @@ test("pushed local branch can open a pull request", async ({ page }) => {
     window.__BUZZ_E2E_PROJECT_REPO_SYNC_STATUS__ = {
       local_path: "/tmp/buzz/REPOS/buzz",
       local_branch: "feature/projects-workflow",
+      local_branches: ["feature/projects-workflow", "space"],
       local_head: commit,
       local_short_head: commit.slice(0, 7),
       remote_branch: "feature/projects-workflow",
@@ -736,6 +854,9 @@ test("pushed local branch can open a pull request", async ({ page }) => {
   await openBuzzProject(page);
 
   await page.getByRole("button", { name: /main/ }).click();
+  await expect(
+    page.getByRole("menuitemradio", { name: "space" }),
+  ).toBeVisible();
   await page
     .getByRole("menuitemradio", { name: "feature/projects-workflow" })
     .click();

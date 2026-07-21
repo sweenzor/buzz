@@ -1,6 +1,7 @@
 import type {
   ProjectLocalRepository,
   ProjectLocalRepoSnapshot,
+  ProjectRepoBranchResult,
   ProjectRepoCloneResult,
   ProjectRepoDiff,
   ProjectRepoMergeResult,
@@ -67,6 +68,7 @@ type RawProjectLocalRepository = {
 type RawProjectRepoSyncStatus = {
   local_path: string | null;
   local_branch: string | null;
+  local_branches: string[];
   local_head: string | null;
   local_short_head: string | null;
   remote_branch: string | null;
@@ -93,6 +95,12 @@ type RawProjectRepoPushResult = {
 
 type RawProjectRepoPullResult = {
   pulled: boolean;
+  message: string;
+};
+
+type RawProjectRepoBranchResult = {
+  branch: string;
+  commit: string;
   message: string;
 };
 
@@ -274,6 +282,7 @@ function fromRawProjectRepoSyncStatus(
   return {
     localPath: status.local_path,
     localBranch: status.local_branch,
+    localBranches: status.local_branches,
     localHead: status.local_head,
     localShortHead: status.local_short_head,
     remoteBranch: status.remote_branch,
@@ -424,6 +433,38 @@ export async function cloneProjectRepository(input: {
     cloneUrl: input.cloneUrl,
     defaultBranch: input.defaultBranch ?? null,
   });
+}
+
+export async function createProjectRemoteBranch(input: {
+  cloneUrl: string;
+  sourceBranch: string;
+  expectedCommit: string;
+  newBranch: string;
+}): Promise<ProjectRepoBranchResult> {
+  return invokeTauri<RawProjectRepoBranchResult>(
+    "create_project_remote_branch",
+    {
+      cloneUrl: input.cloneUrl,
+      sourceBranch: input.sourceBranch,
+      expectedCommit: input.expectedCommit,
+      newBranch: input.newBranch,
+    },
+  );
+}
+
+export async function deleteProjectRemoteBranch(input: {
+  cloneUrl: string;
+  branch: string;
+  expectedCommit: string;
+}): Promise<ProjectRepoBranchResult> {
+  return invokeTauri<RawProjectRepoBranchResult>(
+    "delete_project_remote_branch",
+    {
+      cloneUrl: input.cloneUrl,
+      branch: input.branch,
+      expectedCommit: input.expectedCommit,
+    },
+  );
 }
 
 type RawProjectRepoMergeResult = {

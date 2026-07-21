@@ -316,7 +316,16 @@ const overrides = new Map([
   // migration/materialize.rs; ratchet held at 1110.
   ["src-tauri/src/migration_tests.rs", 1110],
   ["src-tauri/src/nostr_convert.rs", 1126],
-  ["src/shared/api/relayClientSession.ts", 1022],
+  // degraded-network resilience: relay.rs grew past 1000 with the addition of
+  // relay_error_message hint-capping (oversized-hint test via loopback TCP) and
+  // the relay_admission freshness-verification test. The loopback mock was
+  // hardened (std::net + request-read-before-write) adding ~10 lines.
+  // Queued to split test helpers to relay/tests.rs.
+  ["src-tauri/src/relay.rs", 1047],
+  // degraded-network resilience: visibleChannelId field + getter/setter, NOTICE
+  // handler for relay back-pressure, and rate-limit gate imports add ~74 lines
+  // of load-bearing degraded-network recovery code. Queued to split.
+  ["src/shared/api/relayClientSession.ts", 1096],
   // Boot-time event sync (persona/team/agent event reconcile) was split out
   // to event_sync.rs, ratcheting this limit 1575 → 1310. Remaining content is
   // the pre-identity data migrations; still queued to split further.
@@ -366,7 +375,10 @@ const overrides = new Map([
   // queued to split when ProfileSettingsCard is broken into sub-components.
   // +20 lines: scroll-position save/restore across avatar editor open/close
   // to prevent layout shift from the Sign Out section causing a viewport jump.
-  ["src/features/settings/ui/ProfileSettingsCard.tsx", 1033],
+  // +11 lines: signout-dev-webview-state — clear localStorage/sessionStorage
+  // on successful signOut() resolve so dev-build webview state doesn't survive
+  // a reset and vouch for the fresh key. Comment explains the race/redundancy.
+  ["src/features/settings/ui/ProfileSettingsCard.tsx", 1044],
   // keyring-dev-isolation: keyring_service() fn (7 lines) replaces the const
   // to return "buzz-desktop-dev" in debug builds. Load-bearing isolation fix.
   // +10 (1042 -> 1052): media_fetch_client with redirect::Policy::none() so a
