@@ -34,6 +34,32 @@ test("matchesInboxFilter is false when the category is absent", () => {
   assert.equal(matchesInboxFilter({ categories: [] }, "mentions"), false);
 });
 
+test("owned-agent filtering uses the representative event author", () => {
+  const owned = new Set(["owned-agent"]);
+  assert.equal(
+    matchesInboxFilter(
+      {
+        categories: ["activity"],
+        item: { pubkey: "OWNED-AGENT" },
+      },
+      "agent_activity",
+      owned,
+    ),
+    true,
+  );
+  assert.equal(
+    matchesInboxFilter(
+      {
+        categories: ["agent_activity"],
+        item: { pubkey: "somebody-elses-agent" },
+      },
+      "agent_activity",
+      owned,
+    ),
+    false,
+  );
+});
+
 test("matchesInboxFilter matches thread rows by thread tags", () => {
   const replyItem = {
     id: "reply",
