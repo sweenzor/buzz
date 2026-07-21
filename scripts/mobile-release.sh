@@ -23,9 +23,6 @@ fail() {
   exit 1
 }
 
-# shellcheck source=scripts/release-rulesets.sh
-source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/release-rulesets.sh"
-
 require_clean_semver() {
   [[ "$1" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || \
     fail "'$1' is not a mobile release version (expected X.Y.Z)"
@@ -106,7 +103,6 @@ remote_branch_commit_sha() {
 }
 
 command="${1:-}"
-require_canonical_repository || exit 1
 case "$command" in
   start)
     [[ "$#" -ge 2 && "$#" -le 3 ]] || usage
@@ -114,7 +110,6 @@ case "$command" in
     start_ref="${3:-main}"
     require_clean_semver "$version"
     require_clean_tree
-    require_release_branch_ruleset || exit 1
     branch="mobile-release/$version"
     if git ls-remote --exit-code --heads origin "$branch" >/dev/null 2>&1; then
       fail "origin/$branch already exists"
@@ -140,8 +135,6 @@ case "$command" in
     version="$2"
     require_clean_semver "$version"
     require_clean_tree
-    require_release_tag_ruleset || exit 1
-    require_release_branch_ruleset || exit 1
     branch="mobile-release/$version"
     branch_ref="refs/heads/$branch"
     branch_sha="$(remote_branch_commit_sha "$branch_ref")" || \
@@ -159,33 +152,13 @@ case "$command" in
     fetched_sha="$(git rev-parse --verify 'FETCH_HEAD^{commit}')"
     [[ "$fetched_sha" == "$branch_sha" ]] || \
       fail "origin/$branch moved while it was being resolved"
-
-    workflow="mobile-release-candidate.yml"
-    if ! output="$({
-      gh workflow run "$workflow" \
-        --repo block/buzz \
-        --ref main \
-        -f "version=$version" \
-        -f "candidate_number=$next" \
-        -f "target_sha=$fetched_sha"
-    } 2>&1)"; then
-      if [[ "$output" == *"does not have 'workflow_dispatch' trigger"* ]]; then
-        fail "$workflow is not available on main yet; merge the release-process change before publishing a candidate"
-      fi
-      fail "could not dispatch App-backed publication for $tag: $output"
+    git tag -m "Buzz Mobile $version release candidate $next" "$tag" "$fetched_sha"
+    if ! git push origin "refs/tags/$tag"; then
+      git tag -d "$tag" >/dev/null
+      fail "could not publish $tag"
     fi
-    run_url="$(printf '%s\n' "$output" | awk '/^https:\/\/github\.com\/block\/buzz\/actions\/runs\/[0-9]+$/ { print; exit }')"
-    [[ -n "$run_url" ]] || \
-      fail "GitHub accepted the candidate dispatch but returned no workflow run URL"
-    run_id="${run_url##*/}"
-    gh run watch "$run_id" --repo block/buzz --exit-status --compact || \
-      fail "App-backed publication failed: $run_url"
-
-    published_sha="$(remote_tag_commit_sha "refs/tags/$tag")" || \
-      fail "publication completed without exact annotated candidate tag $tag"
-    [[ "$published_sha" == "$fetched_sha" ]] || \
-      fail "$tag resolved to $published_sha instead of requested commit $fetched_sha"
-    printf 'Published %s at %s through buzz-release-bot. Use this exact tag in Release Mobile.\n' \
+    git tag -d "$tag" >/dev/null
+    printf 'Published %s at %s. Use this exact tag in Release Mobile.\n' \
       "$tag" "$fetched_sha"
     ;;
 
@@ -193,8 +166,6 @@ case "$command" in
     [[ "$#" -eq 2 ]] || usage
     candidate="$2"
     require_candidate_version "$candidate"
-    require_release_tag_ruleset || exit 1
-    require_release_branch_ruleset || exit 1
     tag="mobile-v$candidate"
     branch="mobile-release/$candidate_version"
     tag_sha="$(remote_tag_commit_sha "refs/tags/$tag")" || \
@@ -221,7 +192,7 @@ case "$command" in
     git -C "$tmp" merge-base --is-ancestor "$tag_sha" "$fetched_branch_sha" || \
       fail "$tag is not reachable from origin/$branch"
 
-    if gh release view "$tag" >/dev/null 2>&1; then
+    if gh release view "$tag" --repo block/buzz >/dev/null 2>&1; then
       fail "GitHub Release for $tag already exists"
     fi
     notes="$(cat <<NOTES
@@ -232,7 +203,8 @@ that candidate's existing signed artifacts. This release records the source
 selected for store rollout and must not trigger another application build.
 NOTES
 )"
-    gh release create "$tag" --verify-tag --title "Buzz Mobile $candidate_version" \
+    gh release create "$tag" --repo block/buzz --verify-tag \
+      --title "Buzz Mobile $candidate_version" \
       --notes "$notes" --latest=false
     ;;
 
